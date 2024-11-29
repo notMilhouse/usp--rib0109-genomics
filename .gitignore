@@ -49,4 +49,4 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
-download_target/
+data/
