@@ -1,0 +1,5 @@
+manifest_clinical.txt data/clinical/
+manifest_maf_jovem.txt data/maf/jovem
+manifest_maf_velho.txt data/maf/naojovem
+manifest_rnaseq_jovem.txt data/rnaseq/jovem
+manifest_rnaseq_velho.txt data/rnaseq/naojovem
