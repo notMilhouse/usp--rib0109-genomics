@@ -3,8 +3,7 @@
  History files
 .Rhistory
 .Rapp.history
-.Rproj
-
+*.Rproj
 # Session Data files
 .RData
 .RDataTmp
