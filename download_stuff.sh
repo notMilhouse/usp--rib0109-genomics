@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Set up folder structure to receive data
+mkdir -p data/clinical
+mkdir -p data/maf/jovem
+mkdir -p data/maf/naojovem
+mkdir -p data/rnaseq/jovem
+mkdir -p data/rnaseq/naojovem
+
 # Input file containing mappings (manifest and path)
 INPUT_FILE="manifest_map"
 
