@@ -1,83 +1,114 @@
-# Define helper function for RNAseq data processing
-load_rnaseq_data <- function(base_path, category) {
-  category_path <- file.path(base_path, "rnaseq", category)
-  rnaseq_dirs <- list.files(category_path)
+# Processing RNAseq Data
+
+# Define directories for jovem and naojovem RNAseq data
+rnaseq_dirs <- list.dirs("data/rnaseq", recursive = FALSE)
+rnaseq_categories <- c("jovem", "naojovem")
+
+# Initialize a data frame for RNAseq data
+rnaseq_data <- data.frame(gene_id = character())
+
+# Loop through jovem and naojovem categories for RNAseq
+for (category in rnaseq_categories) {
+  cat_dir <- rnaseq_dirs[grepl(category, rnaseq_dirs)]
   
-  if (length(rnaseq_dirs) == 0) {
-    stop(paste("No directories found in", category_path))
+  # Ensure category directory exists
+  if (length(cat_dir) == 0) {
+    cat(paste("No directory found for category:", category, "\n"))
+    next
   }
   
-  # Read and combine RNAseq data
-  raw_counts <- lapply(rnaseq_dirs, function(dir) {
-    file_path <- list.files(file.path(category_path, dir), pattern = '\\.tsv$', full.names = TRUE)
-    if (length(file_path) == 0) {
-      stop(paste("No TSV files found in", file.path(category_path, dir)))
+  # Get list of .tsv files for the category
+  files <- list.files(cat_dir, pattern = "\\.tsv$", full.names = TRUE)
+  
+  # Sum counts across all samples for this category
+  category_counts <- NULL
+  for (file in files) {
+    tmp_data <- read.delim(file, skip = 1)[-c(1:4), c(1, 4)]  # Read gene_id and counts
+    colnames(tmp_data) <- c("gene_id", "count")
+    tmp_data$count <- as.numeric(tmp_data$count)
+    
+    if (is.null(category_counts)) {
+      category_counts <- tmp_data
+    } else {
+      category_counts <- merge(category_counts, tmp_data, by = "gene_id", all = TRUE)
+      category_counts$count <- rowSums(category_counts[, -1], na.rm = TRUE)
+      category_counts <- category_counts[, c("gene_id", "count")]
     }
-    tmp <- read.delim(file_path, skip = 1)[-c(1:4), c(1, 4)]
-    colnames(tmp) <- c("gene_id", dir)
-    tmp
-  })
-  
-  # Merge data frames by gene_id
-  raw_counts <- Reduce(function(x, y) merge(x, y, by = "gene_id", all = TRUE), raw_counts)
-  
-  # Convert to matrix and set rownames
-  rownames(raw_counts) <- raw_counts$gene_id
-  as.matrix(raw_counts[, -1])
-}
-
-# Define helper function for MAF data processing
-load_maf_data <- function(base_path, category) {
-  category_path <- file.path(base_path, "maf", category)
-  maf_dirs <- list.files(category_path)
-  
-  if (length(maf_dirs) == 0) {
-    stop(paste("No directories found in", category_path))
   }
   
-  # Read and combine MAF data
-  maf <- do.call(rbind, lapply(maf_dirs, function(dir) {
-    file_path <- list.files(file.path(category_path, dir), pattern = 'maf.gz$', full.names = TRUE)
-    if (length(file_path) == 0) {
-      stop(paste("No MAF files found in", file.path(category_path, dir)))
-    }
-    tmp <- read.delim(file_path, skip = 7)[, c(1, 9, 16)]
-    colnames(tmp) <- c("Hugo_Symbol", "Tumor_Sample_Barcode", "Variant_Classification")
-    tmp
-  }))
+  # Rename count column to reflect the category
+  colnames(category_counts)[2] <- paste0(category, "_count")
   
-  maf
+  # Merge category counts with the main RNAseq data
+  if (ncol(rnaseq_data) == 1) {  # Only gene_id column present
+    rnaseq_data <- category_counts
+  } else {
+    rnaseq_data <- merge(rnaseq_data, category_counts, by = "gene_id", all = TRUE)
+  }
 }
 
-# Main function to process data
-process_data <- function(base_path, categories, data_type) {
-  processed_data <- lapply(categories, function(category) {
-    if (data_type == "rnaseq") {
-      load_rnaseq_data(base_path, category)
-    } else if (data_type == "maf") {
-      load_maf_data(base_path, category)
-    }
-  })
+# Save the final RNAseq data
+saveRDS(rnaseq_data, file = "data/processed_data/rnaseq_data.rds")
+print(head(rnaseq_data))
+
+# Processing MAF Data
+
+# Define directories for jovem and naojovem MAF data
+maf_dirs <- list.dirs("data/maf", recursive = FALSE)
+maf_categories <- c("jovem", "naojovem")
+
+# Initialize a data frame for MAF data
+maf_data <- NULL
+
+# Loop through jovem and naojovem categories for MAF
+for (category in maf_categories) {
+  cat_dir <- maf_dirs[grepl(category, maf_dirs)]
   
-  # Save processed data for each category
-  names(processed_data) <- categories
-  for (category in categories) {
-    saveRDS(processed_data[[category]], file = file.path(base_path, "processed_data", paste0("TCGA_UCS_", toupper(data_type), "_", toupper(category), ".rds")))
+  # Ensure category directory exists
+  if (length(cat_dir) == 0) {
+    cat(paste("No directory found for category:", category, "\n"))
+    next
   }
   
-  processed_data
+  # Get list of .maf.gz files for the category
+  files <- list.files(cat_dir, pattern = "maf\\.gz$", full.names = TRUE)
+  
+  # Initialize category-specific data frame
+  category_data <- NULL
+  
+  for (file in files) {
+    # Read data, skip first 7 rows and select relevant columns
+    tmp_data <- read.delim(file, skip = 7)[, c(1, 9, 16)]
+    colnames(tmp_data) <- c("Hugo_Symbol", "Variant_Classification", "Tumor_Sample_Barcode")
+    
+    # Add category as a new column
+    tmp_data$Category <- category
+    
+    if (is.null(category_data)) {
+      category_data <- tmp_data
+    } else {
+      category_data <- rbind(category_data, tmp_data)
+    }
+  }
+  
+  # Merge category data into the main maf_data
+  if (is.null(maf_data)) {
+    maf_data <- category_data
+  } else {
+    maf_data <- rbind(maf_data, category_data)
+  }
 }
 
-# Paths and categories
-base_path <- "data"
-categories <- c("jovem", "naojovem")
+# Filter MAF data for relevant mutations
+muts <- c("Frame_Shift_Del", "Frame_Shift_Ins", "Missense_Mutation", "Nonsense_Mutation")
+maf_data_filtered <- maf_data[maf_data$Variant_Classification %in% muts, ]
 
-# Process RNAseq data
-rnaseq_data <- process_data(base_path, categories, "rnaseq")
+# Save the final MAF data
+saveRDS(maf_data, file = "data/processed_data/maf_data.rds")
+saveRDS(maf_data_filtered, file = "data/processed_data/maf_data_filtered.rds")
 
-# Process MAF data
-maf_data <- process_data(base_path, categories, "maf")
-
-# Optional: Combine RNAseq data for integration
-combined_rnaseq <- do.call(cbind, rnaseq_data)
-saveRDS(combined_rnaseq, file = file.path(base_path, "processed_data", "TCGA_UCS_RNASEQ_COMBINED.rds"))
+# Final Output Preview
+cat("RNAseq Data Preview:\n")
+print(head(rnaseq_data))
+cat("\nMAF Data Preview:\n")
+print(head(maf_data))
